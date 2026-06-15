@@ -1,0 +1,133 @@
+---
+# Pipeline 1 : echo-pipeline-one
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: echo-pipeline-one
+spec:
+  tasks:
+    - name: echo-one
+      taskSpec:
+        steps:
+          - name: echo
+            image: alpine
+            script: echo "Hello from pipeline ONE"
+
+---
+# Pipeline 2 : echo-pipeline-two
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: echo-pipeline-two
+spec:
+  tasks:
+    - name: echo-two
+      taskSpec:
+        steps:
+          - name: echo
+            image: alpine
+            script: echo "Hello from pipeline TWO"
+
+---
+# TriggerBinding : extrait les données du payload webhook
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: webhook-binding
+spec:
+  params:
+    - name: ref
+      value: $(body.ref)
+
+---
+# TriggerTemplate 1 : crée un PipelineRun pour le pipeline ONE
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: trigger-template-one
+spec:
+  params:
+    - name: ref
+      default: "unknown"
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        generateName: echo-pipeline-one-run-
+      spec:
+        pipelineRef:
+          name: echo-pipeline-one
+
+---
+# TriggerTemplate 2 : crée un PipelineRun pour le pipeline TWO
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: trigger-template-two
+spec:
+  params:
+    - name: ref
+      default: "unknown"
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        generateName: echo-pipeline-two-run-
+      spec:
+        pipelineRef:
+          name: echo-pipeline-two
+
+---
+# ServiceAccount pour l'EventListener
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tekton-triggers-sa
+
+---
+# ClusterRole : permissions pour créer des PipelineRuns
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tekton-triggers-role
+rules:
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns"]
+    verbs: ["create"]
+  - apiGroups: ["triggers.tekton.dev"]
+    resources: ["triggerbindings", "triggertemplates", "clusterinterceptors"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tekton-triggers-binding
+subjects:
+  - kind: ServiceAccount
+    name: tekton-triggers-sa
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tekton-triggers-role
+
+---
+# EventListener : expose le webhook et déclenche les 2 pipelines
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: webhook-listener
+spec:
+  serviceAccountName: tekton-triggers-sa
+  triggers:
+    - name: trigger-one
+      bindings:
+        - ref: webhook-binding
+      template:
+        ref: trigger-template-one
+    - name: trigger-two
+      bindings:
+        - ref: webhook-binding
+      template:
+        ref: trigger-template-two
