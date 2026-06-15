@@ -1,0 +1,57 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: clone-and-inspect
+  namespace: tekton-poc
+spec:
+  description: >
+    Clone un dépôt Git puis liste son contenu et compte les lignes de code.
+    Démo PoC pour le live Twitch.
+  params:
+    - name: repo-url
+      type: string
+      description: URL du dépôt git à cloner
+      default: https://github.com/tektoncd/pipeline
+    - name: revision
+      type: string
+      default: main
+  workspaces:
+    - name: shared-data
+      description: Workspace partagé entre les tasks (le clone y est déposé)
+  tasks:
+    - name: fetch-source
+      taskRef:
+        name: git-clone
+      workspaces:
+        - name: output
+          workspace: shared-data
+      params:
+        - name: url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.revision)
+    - name: inspect
+      runAfter:
+        - fetch-source
+      workspaces:
+        - name: source
+          workspace: shared-data
+      taskSpec:
+        workspaces:
+          - name: source
+        steps:
+          - name: list-and-count
+            image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+            script: |
+              #!/usr/bin/env bash
+              set -e
+              cd "$(workspaces.source.path)"
+              echo "=== Contenu racine du dépôt ==="
+              ls -la
+              echo ""
+              echo "=== Nombre de fichiers .go ==="
+              find . -name '*.go' | wc -l
+              echo "=== Nombre de fichiers .yaml ==="
+              find . -name '*.yaml' -o -name '*.yml' | wc -l
+              echo ""
+              echo "✅ Pipeline terminé avec succès."
