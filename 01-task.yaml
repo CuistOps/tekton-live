@@ -1,0 +1,19 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: hello
+  namespace: tekton-poc
+spec:
+  params:
+    - name: name
+      type: string
+      default: "Joel"
+  steps:
+    - name: say-hello
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      script: |
+        #!/usr/bin/env bash
+        echo "👋 Bonjour ${1} depuis Tekton !"
+        echo "Step exécuté dans un pod Kubernetes, isolé."
+      args:
+        - "$(params.name)"
