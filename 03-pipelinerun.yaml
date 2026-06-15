@@ -1,0 +1,26 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: clone-and-inspect-run-
+  namespace: tekton-poc
+spec:
+  taskRunTemplate:
+    podTemplate:
+      securityContext:
+        fsGroup: 65532
+  pipelineRef:
+    name: clone-and-inspect
+  params:
+    - name: repo-url
+      value: https://github.com/tektoncd/catalog
+    - name: revision
+      value: main
+  workspaces:
+    - name: shared-data
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
